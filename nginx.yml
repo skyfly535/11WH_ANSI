@@ -1,0 +1,65 @@
+---
+ - name: test playbook
+   hosts: otus
+   become: true
+   vars:
+    - nginx_listen_port: 8080 #объявление переменной порта прослушивания nginx для template
+   
+   tasks:
+    - name: print os_family # проверочная tasks для определения семейства ОС
+      ansible.builtin.debug:
+        var: ansible_facts['os_family']
+
+    - name: instal nginx on CentOS # блок tasks для обновления ОС, установки epel-release и nginx на CentOS
+      block:  
+        - name: Update CentOS # tasks для обновления ОС
+          ansible.builtin.yum:
+            update_cache: true
+
+        - name: instal epel-release # tasks для установки epel-release
+          ansible.builtin.yum:
+            pkg: epel-release
+            state: present
+
+        - name: instal nginx # tasks для установки nginx
+          ansible.builtin.yum:
+            pkg: nginx
+            state: present
+          notify: start nginx # вызов handlers для старта nginx
+      when: ansible_facts['distribution'] == 'CentOS' 
+
+    - name: instal nginx Ubuntu # блок tasks для обновления ОС и установки nginx на Ubuntu
+      block:
+        - name: Update Ubuntu
+          ansible.builtin.apt:
+            update_cache: true
+            cache_valid_time: 3600
+            upgrade: full
+
+        - name: instal nginx # tasks для установки nginx
+          ansible.builtin.apt:
+            pkg: nginx
+            state: present
+          notify: start nginx
+      when: ansible_facts['distribution'] == 'Ubuntu'   
+
+    - name: template # tasks для формирования нужного файла config для nginx
+      ansible.builtin.template:
+        src: nginx.conf.j2
+        dest: /etc/nginx/nginx.conf
+      notify: reloload nginx # вызов handlers для reloload nginx
+
+   handlers:
+    - name: start nginx # handler на запуск
+      become: true
+      ansible.builtin.systemd:
+        service: nginx.service
+        state: started
+        enabled: true
+     
+    - name: reloload nginx # handler на перезапуск при изменении настроек
+      become: true
+      ansible.builtin.systemd:
+        service: nginx.service
+        state: reloaded
+        enabled: true
